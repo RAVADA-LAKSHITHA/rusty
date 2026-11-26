@@ -14,7 +14,7 @@ use std::env;
 use std::io::{self, BufRead, Write};
 
 const DEFAULT_URL: &str = "https://api.groq.com/openai/v1/chat/completions";
-const DEFAULT_MODEL: &str = "llama-3.3-70b-versatile";
+const DEFAULT_MODEL: &str = "openai/gpt-oss-120b";
 const SYSTEM_PROMPT: &str = "You are Rusty, a friendly, concise assistant. \
 Answer questions accurately and clearly. If you are unsure, say so.";
 const MAX_HISTORY: usize = 20;
