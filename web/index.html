@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rusty</title>
+<style>
+  :root { --bg:#faf8f5; --card:#fff; --text:#1f1f1f; --muted:#6b6b6b; --accent:#f26a1b; --line:#e8e3dc; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#17150f; --card:#221f18; --text:#f1ece4; --muted:#a39d92; --line:#383329; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--text);
+         display:flex; flex-direction:column; height:100vh; }
+  header { display:flex; justify-content:space-between; align-items:center; padding:14px 20px;
+           border-bottom:1px solid var(--line); }
+  header b { color:var(--accent); font-size:1.2rem; }
+  header button { background:none; border:0; color:var(--muted); font-size:1rem; cursor:pointer; margin-left:14px; }
+  #chat { flex:1; overflow-y:auto; padding:20px; max-width:760px; width:100%; margin:0 auto; }
+  .msg { margin:10px 0; padding:12px 14px; border-radius:12px; white-space:pre-wrap; line-height:1.5;
+         max-width:88%; background:var(--card); border:1px solid var(--line); }
+  .user { margin-left:auto; background:var(--accent); color:#fff; border-color:var(--accent); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px; margin:20px 0; }
+  .card h1 { margin-top:0; }
+  .row { display:flex; gap:10px; }
+  input { flex:1; padding:12px 14px; border-radius:10px; border:1px solid var(--line);
+          background:var(--card); color:var(--text); font-size:1rem; }
+  .go { background:var(--accent); color:#fff; border:0; border-radius:10px; padding:0 20px; font-size:1rem; cursor:pointer; }
+  .go:disabled { opacity:.5; cursor:default; }
+  footer { padding:14px 20px 20px; max-width:760px; width:100%; margin:0 auto; }
+  p.small { color:var(--muted); font-size:.9rem; }
+</style>
+</head>
+<body>
+<header>
+  <b>🦀 Rusty</b>
+  <div><button id="reset">Reset</button><button id="key">Key</button></div>
+</header>
+<div id="chat"></div>
+<footer>
+  <form id="form" class="row">
+    <input id="q" placeholder="Ask Rusty anything..." autocomplete="off">
+    <button class="go" id="send">Send</button>
+  </form>
+</footer>
+<script>
+const MODEL = "openai/gpt-oss-120b";
+const URL = "https://api.groq.com/openai/v1/chat/completions";
+const SYSTEM = "You are Rusty, a friendly, concise assistant. Answer clearly. If unsure, say so.";
+const MAX_HISTORY = 20;
+
+const chat = document.getElementById("chat");
+const form = document.getElementById("form");
+const q = document.getElementById("q");
+const send = document.getElementById("send");
+
+let history = [];
+
+function getKey() { try { return localStorage.getItem("rusty_key") || ""; } catch (e) { return ""; } }
+function setKey(k) { try { localStorage.setItem("rusty_key", k); } catch (e) {} }
+function clearKey() { try { localStorage.removeItem("rusty_key"); } catch (e) {} }
+
+function add(text, cls) {
+  const d = document.createElement("div");
+  d.className = "msg " + cls;
+  d.textContent = text;           // textContent: never interpreted as HTML
+  chat.appendChild(d);
+  chat.scrollTop = chat.scrollHeight;
+  return d;
+}
+
+function showKeyCard() {
+  chat.innerHTML = "";
+  const c = document.createElement("div");
+  c.className = "card";
+  c.innerHTML = '<h1>Hi, I\'m Rusty!</h1>' +
+    '<p class="small">Paste your free Groq API key to chat. It is saved only in this browser ' +
+    'and sent only to Groq. Get one at ' +
+    '<a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a>.</p>' +
+    '<form class="row" id="kf"><input id="ki" type="password" placeholder="gsk_..." autocomplete="off">' +
+    '<button class="go">Save</button></form>';
+  chat.appendChild(c);
+  document.getElementById("kf").onsubmit = (e) => {
+    e.preventDefault();
+    const v = document.getElementById("ki").value.trim();
+    if (v) { setKey(v); start(); }
+  };
+}
+
+function start() {
+  chat.innerHTML = "";
+  history = [];
+  add("Hi, I'm Rusty! Ask me anything.", "bot");
+}
+
+async function ask(text) {
+  history.push({ role: "user", content: text });
+  if (history.length > MAX_HISTORY) history = history.slice(-MAX_HISTORY);
+  const res = await fetch(URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + getKey() },
+    body: JSON.stringify({ model: MODEL, messages: [{ role: "system", content: SYSTEM }, ...history] })
+  });
+  if (!res.ok) {
+    history.pop();
+    throw new Error("Groq error " + res.status + ": " + (await res.text()).slice(0, 300));
+  }
+  const data = await res.json();
+  const answer = (data.choices?.[0]?.message?.content || "").trim() || "(empty reply)";
+  history.push({ role: "assistant", content: answer });
+  return answer;
+}
+
+form.onsubmit = async (e) => {
+  e.preventDefault();
+  const text = q.value.trim();
+  if (!text) return;
+  q.value = "";
+  add(text, "user");
+  send.disabled = true;
+  const thinking = add("…", "bot");
+  try { thinking.textContent = await ask(text); }
+  catch (err) { thinking.textContent = "⚠️ " + err.message; }
+  send.disabled = false;
+  q.focus();
+};
+
+document.getElementById("reset").onclick = start;
+document.getElementById("key").onclick = () => { clearKey(); showKeyCard(); };
+
+if (getKey()) start(); else showKeyCard();
+</script>
+</body>
+</html>
